@@ -55,7 +55,7 @@ function loadCritterV11GLB(THREE, glbUrl, rigGroups, bumpTex) {
         const pbr = m.pbrMetallicRoughness || {};
         const bc = pbr.baseColorFactor || [0.8, 0.8, 0.8, 1.0];
         const rough = pbr.roughnessFactor !== undefined ? pbr.roughnessFactor : 0.84;
-        const metal = pbr.metallicFactor !== undefined ? pbr.metallicFactor : 0.0;
+        const metal = Math.min(0.22, pbr.metallicFactor !== undefined ? pbr.metallicFactor : 0.0);
         const col = new THREE.Color();
         if (col.setRGB) {
           col.setRGB(bc[0], bc[1], bc[2], THREE.LinearSRGBColorSpace || 'srgb-linear');
@@ -331,7 +331,7 @@ export function buildBabaChopsPlushModel(THREE) {
       name: 'Baba_Silver_Zipper_Hardware',
       color: 0xc8cdd6,
       roughness: 0.28,
-      metalness: 0.80
+      metalness: 0.22
     }),
     seamDark: new THREE.MeshStandardMaterial({
       name: 'Baba_Plush_Seam_Groove',

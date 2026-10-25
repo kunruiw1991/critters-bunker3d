@@ -341,6 +341,104 @@ export const BunkerAudio = {
         scheduleKalimbaNote(audioCtx, masterGain, 261.63, t + 0.12, 0.32, 0.20);
       }
     } catch (_) {}
+  },
+
+  /**
+   * Warm bandpass noise sizzle + ascending pentatonic kalimba third when glazing at Sauce Bar
+   */
+  playSauceSizzle() {
+    if (muted || !canTrigger('sauceSizzle', 35)) return;
+    const audioCtx = ensureContext();
+    if (!audioCtx || !masterGain) return;
+    try {
+      const t = audioCtx.currentTime;
+      scheduleFilteredNoise(audioCtx, masterGain, t, 0.22, 'bandpass', 950, 1850, 2.2, 0.18, 0.012);
+      scheduleKalimbaNote(audioCtx, masterGain, 659.25, t + 0.02, 0.20, 0.22);
+      scheduleKalimbaNote(audioCtx, masterGain, 880.00, t + 0.075, 0.24, 0.24);
+      scheduleKalimbaNote(audioCtx, masterGain, 1046.50, t + 0.13, 0.28, 0.22);
+    } catch (_) {}
+  },
+
+  /**
+   * Bubbly cream pop + warm harmonic bell chord when serving Marshmallow Cocoa
+   */
+  playCocoaSip() {
+    if (muted || !canTrigger('cocoaSip', 40)) return;
+    const audioCtx = ensureContext();
+    if (!audioCtx || !masterGain) return;
+    try {
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(320, t);
+      osc.frequency.exponentialRampToValueAtTime(640, t + 0.09);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.22, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+      osc.connect(g);
+      g.connect(masterGain);
+      osc.start(t);
+      osc.stop(t + 0.12);
+
+      scheduleKalimbaNote(audioCtx, masterGain, 523.25, t + 0.04, 0.28, 0.18);
+      scheduleKalimbaNote(audioCtx, masterGain, 783.99, t + 0.08, 0.30, 0.20);
+      scheduleKalimbaNote(audioCtx, masterGain, 1046.50, t + 0.12, 0.34, 0.22);
+    } catch (_) {}
+  },
+
+  /**
+   * Cheerful bouncy 3-note kalimba arpeggio when Sous-Chef Helper Buddy assists or is tapped
+   */
+  playHelperCheer() {
+    if (muted || !canTrigger('helperCheer', 45)) return;
+    const audioCtx = ensureContext();
+    if (!audioCtx || !masterGain) return;
+    try {
+      const t = audioCtx.currentTime;
+      const notes = [587.33, 783.99, 1174.66];
+      notes.forEach((f, idx) => {
+        scheduleKalimbaNote(audioCtx, masterGain, f, t + idx * 0.055, 0.22, 0.22);
+      });
+    } catch (_) {}
+  },
+
+  playHelperChirp() {
+    return this.playHelperCheer();
+  },
+
+  /**
+   * Sparkling 5-note pentatonic glockenspiel cascade when opening Golden Mystery Supply Crate
+   */
+  playGoldenCrateFanfare() {
+    if (muted || !canTrigger('goldenCrateFanfare', 60)) return;
+    const audioCtx = ensureContext();
+    if (!audioCtx || !masterGain) return;
+    try {
+      const t = audioCtx.currentTime;
+      const cascade = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+      cascade.forEach((f, idx) => {
+        scheduleKalimbaNote(audioCtx, masterGain, f, t + idx * 0.05, 0.32, 0.23);
+      });
+    } catch (_) {}
+  },
+
+  /**
+   * Magical aurora / royal banquet bell chord when evolving into Wave 2 or Wave 3
+   */
+  playWaveEvolutionChime(waveNum = 2) {
+    if (muted || !canTrigger('waveEvolution', 80)) return;
+    const audioCtx = ensureContext();
+    if (!audioCtx || !masterGain) return;
+    try {
+      const t = audioCtx.currentTime;
+      const chord = waveNum >= 3
+        ? [523.25, 659.25, 783.99, 1046.50, 1174.66]
+        : [587.33, 783.99, 880.00, 1174.66];
+      chord.forEach((f, idx) => {
+        scheduleKalimbaNote(audioCtx, masterGain, f, t + idx * 0.06, 0.36, 0.20);
+      });
+    } catch (_) {}
   }
 };
 

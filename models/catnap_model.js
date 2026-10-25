@@ -55,7 +55,7 @@ function loadCritterV11GLB(THREE, glbUrl, rigGroups, bumpTex) {
         const pbr = m.pbrMetallicRoughness || {};
         const bc = pbr.baseColorFactor || [0.8, 0.8, 0.8, 1.0];
         const rough = pbr.roughnessFactor !== undefined ? pbr.roughnessFactor : 0.84;
-        const metal = pbr.metallicFactor !== undefined ? pbr.metallicFactor : 0.0;
+        const metal = Math.min(0.22, pbr.metallicFactor !== undefined ? pbr.metallicFactor : 0.0);
         const col = new THREE.Color();
         if (col.setRGB) {
           col.setRGB(bc[0], bc[1], bc[2], THREE.LinearSRGBColorSpace || 'srgb-linear');
@@ -383,13 +383,13 @@ export function buildCatNapPlushModel(THREE) {
       emissive: 0x423000,
       emissiveIntensity: 0.12,
       roughness: 0.24,
-      metalness: 0.78
+      metalness: 0.22
     }),
     metalZipper: new THREE.MeshStandardMaterial({
       name: 'CatNap_Zipper_Hardware',
       color: 0xc8cdd6,
       roughness: 0.28,
-      metalness: 0.82
+      metalness: 0.22
     }),
     zipperTrack: new THREE.MeshStandardMaterial({
       name: 'CatNap_Zipper_Track_Black',

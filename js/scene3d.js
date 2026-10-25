@@ -4,6 +4,19 @@ import { buildDogDayPlushModel } from '../models/dogday_model.js';
 import { buildBabaChopsPlushModel } from '../models/baba_chops_model.js';
 import { buildHoppyHopscotchPlushModel } from '../models/hoppy_hopscotch_model.js';
 import { buildCraftyCornPlushModel } from '../models/craftycorn_model.js';
+import { buildBubbaBubbaphantPlushModel } from '../models/bubba_bubbaphant_model.js';
+import { buildKickinChickenPlushModel } from '../models/kickin_chicken_model.js';
+import { buildBobbyBearHugPlushModel } from '../models/bobby_bearhug_model.js';
+import {
+  enforceNonIblMaterialHygiene,
+  createBunkerHelperAndEvents,
+} from './helper_and_events.js';
+
+export const WAVE_THEMES = {
+  1: 'cozy_amber_cabin',
+  2: 'aurora_ice_lantern_party',
+  3: 'grand_golden_royal_banquet',
+};
 
 export const FOOD_TYPES = [
   'steak',
@@ -28,6 +41,10 @@ export const STATION_IDS = [
   'tray_3',
   'hotpot_0',
   'hotpot_1',
+  'sauce_bar',
+  'cocoa_station',
+  'helper_buddy',
+  'golden_crate',
   'chinchilla_flute',
   'snowball_pile',
   'window_bandit',
@@ -37,7 +54,7 @@ export const STATION_IDS = [
   'customer_2',
 ];
 
-const STATION_COORDS = {
+export const STATION_COORDS = {
   shelf_steak: new THREE.Vector3(-3.65, 0.72, -0.55),
   shelf_lobster: new THREE.Vector3(-2.55, 0.72, -0.55),
   shelf_cheese: new THREE.Vector3(-3.65, 0.42, 0.48),
@@ -51,6 +68,10 @@ const STATION_COORDS = {
   tray_3: new THREE.Vector3(-0.55, 0.18, -0.05),
   hotpot_0: new THREE.Vector3(0.55, 0.48, 0.55),
   hotpot_1: new THREE.Vector3(1.65, 0.48, 0.55),
+  sauce_bar: new THREE.Vector3(-0.05, 0.22, 1.72),
+  cocoa_station: new THREE.Vector3(2.35, 0.26, -0.35),
+  helper_buddy: new THREE.Vector3(-2.35, 0.36, 1.85),
+  golden_crate: new THREE.Vector3(0.0, 0.42, 1.82),
   chinchilla_flute: new THREE.Vector3(3.32, 0.42, 0.15),
   snowball_pile: new THREE.Vector3(3.25, 0.22, 1.55),
   trash_bin: new THREE.Vector3(2.25, 0.22, 1.95),
@@ -175,9 +196,10 @@ function createCritterStandeeTexture(critterId) {
 /**
  * Builds a high-contrast, unmistakable 3D food toy mesh for each of the 6 supplies.
  */
-export function buildFoodItemMesh(foodType, cooked = false, burned = false) {
+export function buildFoodItemMesh(foodType, cooked = false, burned = false, glazed = false) {
   const group = new THREE.Group();
   group.userData.foodType = foodType;
+  group.userData.glazed = glazed;
 
   const tintBurn = (hex) => {
     if (burned) return 0x29201b;
@@ -363,6 +385,295 @@ export function buildFoodItemMesh(foodType, cooked = false, burned = false) {
     group.add(aura);
   }
 
+  if (glazed && !burned) {
+    // Glazed Supreme Delicacy: rotating 3D golden star halo + sesame-chili glaze droplets
+    const glazeHaloGroup = new THREE.Group();
+    glazeHaloGroup.name = 'GlazeStarHalo';
+    glazeHaloGroup.position.y = 0.22;
+
+    const haloRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.27, 0.022, 10, 24),
+      new THREE.MeshStandardMaterial({
+        color: 0xfbbf24,
+        emissive: 0xd97706,
+        emissiveIntensity: 0.55,
+        roughness: 0.22,
+        metalness: 0.20,
+      })
+    );
+    haloRing.rotation.x = Math.PI * 0.5;
+    glazeHaloGroup.add(haloRing);
+
+    const starGemMat = new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.65,
+      roughness: 0.20,
+      metalness: 0.20,
+    });
+    for (let k = 0; k < 4; k++) {
+      const ang = (k / 4) * Math.PI * 2;
+      const starGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.055, 0), starGemMat);
+      starGem.position.set(Math.cos(ang) * 0.27, 0.02, Math.sin(ang) * 0.27);
+      glazeHaloGroup.add(starGem);
+    }
+    group.add(glazeHaloGroup);
+    group.userData.glazeHaloGroup = glazeHaloGroup;
+  }
+
+  return group;
+}
+
+/**
+ * Pillar 1 Station A: 3D Sesame & Chili Dipping Sauce Bar (sauce_bar)
+ */
+function buildSauceBarStationMesh() {
+  const group = new THREE.Group();
+
+  const caddyWoodMat = new THREE.MeshStandardMaterial({
+    color: 0x78350f,
+    roughness: 0.52,
+    metalness: 0.06,
+  });
+  const trimGoldMat = new THREE.MeshStandardMaterial({
+    color: 0xfbbf24,
+    emissive: 0xb45309,
+    emissiveIntensity: 0.22,
+    roughness: 0.26,
+    metalness: 0.22,
+  });
+  const ceramicMat = new THREE.MeshStandardMaterial({
+    color: 0xfffbeb,
+    roughness: 0.22,
+    metalness: 0.08,
+  });
+
+  // Wooden condiment caddy tray
+  const baseTray = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.08, 0.50), caddyWoodMat);
+  baseTray.position.y = 0.04;
+  baseTray.castShadow = true;
+  baseTray.receiveShadow = true;
+  group.add(baseTray);
+
+  const handleBridge = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.022, 10, 20, Math.PI), trimGoldMat);
+  handleBridge.position.set(0, 0.22, -0.16);
+  group.add(handleBridge);
+
+  // Twin glossy ceramic dipping bowls: Left = Golden Sesame-Peanut, Right = Ruby Chili-Garlic Oil
+  const sesameMat = new THREE.MeshStandardMaterial({
+    color: 0xf59e0b,
+    emissive: 0xb45309,
+    emissiveIntensity: 0.35,
+    roughness: 0.20,
+    metalness: 0.10,
+  });
+  const chiliMat = new THREE.MeshStandardMaterial({
+    color: 0xdc2626,
+    emissive: 0x991b1b,
+    emissiveIntensity: 0.42,
+    roughness: 0.18,
+    metalness: 0.10,
+  });
+
+  const bowlPositions = [-0.21, 0.21];
+  for (let b = 0; b < 2; b++) {
+    const bx = bowlPositions[b];
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.14, 0.14, 22), ceramicMat);
+    bowl.position.set(bx, 0.13, 0.02);
+    bowl.castShadow = true;
+    group.add(bowl);
+
+    const bowlRim = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.02, 10, 22), trimGoldMat);
+    bowlRim.rotation.x = Math.PI * 0.5;
+    bowlRim.position.set(bx, 0.20, 0.02);
+    group.add(bowlRim);
+
+    const sauceFill = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.15, 0.04, 20),
+      b === 0 ? sesameMat : chiliMat
+    );
+    sauceFill.position.set(bx, 0.18, 0.02);
+    group.add(sauceFill);
+  }
+
+  // Floating sesame seeds & green scallion rings above the twin bowls
+  const particlesGroup = new THREE.Group();
+  particlesGroup.position.y = 0.24;
+  const seedMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+  const scallionMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
+  for (let i = 0; i < 6; i++) {
+    const isLeft = i < 3;
+    const ang = (i % 3) * ((Math.PI * 2) / 3);
+    const pMesh = isLeft
+      ? new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 8), seedMat)
+      : new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.009, 6, 12), scallionMat);
+    if (!isLeft) pMesh.rotation.x = Math.PI * 0.5;
+    pMesh.position.set(
+      (isLeft ? -0.21 : 0.21) + Math.cos(ang) * 0.07,
+      0.01 + (i % 2) * 0.02,
+      0.02 + Math.sin(ang) * 0.07
+    );
+    particlesGroup.add(pMesh);
+  }
+  group.add(particlesGroup);
+
+  // Wooden dipping ladle
+  const ladlePivot = new THREE.Group();
+  ladlePivot.position.set(-0.18, 0.24, 0.02);
+  const ladleStick = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.016, 0.018, 0.28, 10),
+    new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.55 })
+  );
+  ladleStick.rotation.z = -0.52;
+  ladleStick.position.set(0.08, 0.08, 0);
+  ladlePivot.add(ladleStick);
+  const ladleCup = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 10), trimGoldMat);
+  ladleCup.scale.set(1, 0.55, 1);
+  ladlePivot.add(ladleCup);
+  group.add(ladlePivot);
+
+  // Wave 2/3 Double-Dip Golden Star Multiplier Crown
+  const doubleDipCrown = new THREE.Group();
+  doubleDipCrown.position.set(0, 0.42, -0.06);
+  const starCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.09, 0), trimGoldMat);
+  doubleDipCrown.add(starCore);
+  const starOrbit = new THREE.Mesh(
+    new THREE.RingGeometry(0.12, 0.16, 20),
+    new THREE.MeshBasicMaterial({ color: 0xfef08a, side: THREE.DoubleSide })
+  );
+  doubleDipCrown.add(starOrbit);
+  doubleDipCrown.visible = false;
+  group.add(doubleDipCrown);
+
+  // Golden Ready Aura Ring when any hotpot has cookProgress >= 0.65 or state === 'ready'
+  const readyAuraRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.42, 0.53, 32),
+    new THREE.MeshBasicMaterial({
+      color: 0xfde047,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.0,
+    })
+  );
+  readyAuraRing.rotation.x = -Math.PI * 0.5;
+  readyAuraRing.position.y = 0.015;
+  group.add(readyAuraRing);
+
+  group.userData = { particlesGroup, ladlePivot, doubleDipCrown, readyAuraRing };
+  return group;
+}
+
+/**
+ * Builds a single 3D Marshmallow Cocoa Mug (used both on the warmer and during parabolic flight)
+ */
+function buildCocoaMugMesh() {
+  const mugGroup = new THREE.Group();
+  const mugRedMat = new THREE.MeshStandardMaterial({
+    color: 0xe11d48,
+    roughness: 0.28,
+    metalness: 0.10,
+  });
+  const creamMat = new THREE.MeshStandardMaterial({
+    color: 0xfffbeb,
+    roughness: 0.42,
+    metalness: 0.02,
+  });
+  const starMallowMat = new THREE.MeshStandardMaterial({
+    color: 0xfde047,
+    emissive: 0xd97706,
+    emissiveIntensity: 0.25,
+    roughness: 0.32,
+    metalness: 0.12,
+  });
+
+  const cupBody = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.145, 0.24, 20), mugRedMat);
+  cupBody.position.y = 0.12;
+  cupBody.castShadow = true;
+  mugGroup.add(cupBody);
+
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.022, 10, 16, Math.PI), mugRedMat);
+  handle.rotation.z = -Math.PI * 0.5;
+  handle.position.set(0.16, 0.13, 0);
+  mugGroup.add(handle);
+
+  const cocoaSurface = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.155, 0.155, 0.02, 18),
+    new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.35 })
+  );
+  cocoaSurface.position.y = 0.23;
+  mugGroup.add(cocoaSurface);
+
+  // Whipped cream swirl + 3D star marshmallows
+  const creamBase = new THREE.Mesh(new THREE.SphereGeometry(0.135, 14, 12), creamMat);
+  creamBase.scale.set(1, 0.65, 1);
+  creamBase.position.y = 0.26;
+  mugGroup.add(creamBase);
+
+  const creamPeak = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.11, 12), creamMat);
+  creamPeak.position.y = 0.33;
+  mugGroup.add(creamPeak);
+
+  for (let m = 0; m < 3; m++) {
+    const ang = (m / 3) * Math.PI * 2;
+    const mallow = new THREE.Mesh(new THREE.OctahedronGeometry(0.042, 0), starMallowMat);
+    mallow.position.set(Math.cos(ang) * 0.085, 0.30, Math.sin(ang) * 0.085);
+    mugGroup.add(mallow);
+  }
+
+  return mugGroup;
+}
+
+/**
+ * Pillar 1 Station B: 3D Cozy Marshmallow Cocoa Mug Warmer (cocoa_station)
+ */
+function buildCocoaWarmerStationMesh() {
+  const group = new THREE.Group();
+
+  const copperPlateMat = new THREE.MeshStandardMaterial({
+    color: 0xea580c,
+    emissive: 0x9a3412,
+    emissiveIntensity: 0.32,
+    roughness: 0.28,
+    metalness: 0.22,
+  });
+
+  const warmerBase = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.38, 0.07, 24), copperPlateMat);
+  warmerBase.position.y = 0.035;
+  warmerBase.castShadow = true;
+  warmerBase.receiveShadow = true;
+  group.add(warmerBase);
+
+  const warmGlowRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.35, 0.43, 28),
+    new THREE.MeshBasicMaterial({
+      color: 0xfbbf24,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.65,
+    })
+  );
+  warmGlowRing.rotation.x = -Math.PI * 0.5;
+  warmGlowRing.position.y = 0.015;
+  group.add(warmGlowRing);
+
+  const mugMesh = buildCocoaMugMesh();
+  mugMesh.position.y = 0.07;
+  group.add(mugMesh);
+
+  const steamGroup = new THREE.Group();
+  const steamMat = new THREE.MeshBasicMaterial({
+    color: 0xfffbeb,
+    transparent: true,
+    opacity: 0.55,
+  });
+  for (let s = 0; s < 3; s++) {
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(0.038 + s * 0.01, 10, 8), steamMat);
+    puff.position.set((s - 1) * 0.05, 0.46 + s * 0.09, 0);
+    steamGroup.add(puff);
+  }
+  group.add(steamGroup);
+
+  group.userData = { mugMesh, steamGroup, warmGlowRing };
   return group;
 }
 
@@ -909,12 +1220,174 @@ export function createBunkerScene(canvas) {
   }
 
   // ============================================================================
-  // 6. Right Zone: Flute Chinchilla, Snowball Pile, & Trash Bin
+  // 6. Right & Center Toy Stations: Flute Chinchilla, Sauce Bar, Cocoa Warmer, Helper & Events
   // ============================================================================
   const chinchillaMesh = buildFluteChinchillaMesh();
   chinchillaMesh.position.copy(STATION_COORDS.chinchilla_flute);
   chinchillaMesh.rotation.y = -0.42;
   worldGroup.add(chinchillaMesh);
+
+  // Pillar 1 Station A: 3D Sesame & Chili Dipping Sauce Bar (sauce_bar)
+  const sauceBarGroup = buildSauceBarStationMesh();
+  sauceBarGroup.position.copy(STATION_COORDS.sauce_bar);
+  worldGroup.add(sauceBarGroup);
+
+  // Pillar 1 Station B: 3D Cozy Marshmallow Cocoa Mug Warmer (cocoa_station)
+  const cocoaStationGroup = buildCocoaWarmerStationMesh();
+  cocoaStationGroup.position.copy(STATION_COORDS.cocoa_station);
+  worldGroup.add(cocoaStationGroup);
+
+  // Pillar 2 Integration: Picky Piggy Sous-Chef Helper Buddy & Golden Mystery Crate
+  const helperEventsScene = createBunkerHelperAndEvents(THREE, scene, worldGroup);
+
+  // ============================================================================
+  // 6B. Pillar 3: Stage-by-Stage Wave 2 & Wave 3 Visual & Toy Evolution Props
+  // ============================================================================
+  // Wave 2: Shimmering 3D Northern Lights (Aurora Borealis) Ribbon Curtain + Crystal Ice Lanterns
+  const wave2PropsGroup = new THREE.Group();
+  wave2PropsGroup.visible = false;
+  worldGroup.add(wave2PropsGroup);
+
+  const auroraRibbons = [];
+  const auroraColors = [0x34d399, 0x38bdf8, 0xc084fc];
+  for (let a = 0; a < 3; a++) {
+    const ribbonGeo = new THREE.PlaneGeometry(3.0, 0.34, 24, 3);
+    const ribbonMat = new THREE.MeshBasicMaterial({
+      color: auroraColors[a],
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.68 - a * 0.08,
+      toneMapped: false,
+      fog: false,
+    });
+    const ribbon = new THREE.Mesh(ribbonGeo, ribbonMat);
+    ribbon.position.set(
+      STATION_COORDS.window_bandit.x,
+      STATION_COORDS.window_bandit.y + 0.32 - a * 0.22,
+      STATION_COORDS.window_bandit.z + 0.07 + a * 0.015
+    );
+    wave2PropsGroup.add(ribbon);
+    auroraRibbons.push({ mesh: ribbon, geo: ribbonGeo, phaseOffset: a * 1.4 });
+  }
+
+  const iceLanternCrystalMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    emissive: 0x0284c7,
+    emissiveIntensity: 0.72,
+    roughness: 0.18,
+    metalness: 0.18,
+    transparent: true,
+    opacity: 0.88,
+  });
+  const iceLanternCoreMat = new THREE.MeshBasicMaterial({
+    color: 0xe0f2fe,
+    toneMapped: false,
+  });
+  const iceLanternMeshes = [];
+  for (const lx of [-3.95, 3.95]) {
+    const lantern = new THREE.Group();
+    lantern.position.set(lx, 0.45, -2.05);
+    const pedestal = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.26, 0.32, 0.12, 16),
+      new THREE.MeshStandardMaterial({ color: 0xe0f2fe, roughness: 0.32, metalness: 0.12 })
+    );
+    pedestal.position.y = 0.06;
+    lantern.add(pedestal);
+
+    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), iceLanternCrystalMat);
+    crystal.scale.set(0.85, 1.45, 0.85);
+    crystal.position.y = 0.42;
+    lantern.add(crystal);
+
+    const innerStar = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), iceLanternCoreMat);
+    innerStar.position.y = 0.42;
+    lantern.add(innerStar);
+
+    wave2PropsGroup.add(lantern);
+    iceLanternMeshes.push({ crystal, innerStar });
+  }
+
+  // Wave 3: Festive Fairy String Lights + Golden Dragon-Crown Hotpot Rim + Party Disco Star Ball
+  const wave3PropsGroup = new THREE.Group();
+  wave3PropsGroup.visible = false;
+  worldGroup.add(wave3PropsGroup);
+
+  const fairyBulbs = [];
+  const fairyPalette = [0xfde047, 0xf472b6, 0x38bdf8, 0xc084fc, 0x4ade80, 0xfb923c];
+  for (let b = 0; b < 12; b++) {
+    const u = b / 11;
+    const bx = -4.6 + u * 9.2;
+    const sag = Math.sin(u * Math.PI) * 0.32;
+    const by = 2.75 - sag;
+    const bulbMat = new THREE.MeshBasicMaterial({
+      color: fairyPalette[b % fairyPalette.length],
+      toneMapped: false,
+      fog: false,
+    });
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 10), bulbMat);
+    bulb.position.set(bx, by, -2.98);
+    wave3PropsGroup.add(bulb);
+    fairyBulbs.push(bulb);
+  }
+
+  // Golden Dragon-Crown Rim mounted onto Copper Hotpot for Wave 3
+  const dragonCrownGroup = new THREE.Group();
+  dragonCrownGroup.position.y = 0.27;
+  dragonCrownGroup.visible = false;
+  hotpotRoot.add(dragonCrownGroup);
+
+  const crownRimTorus = new THREE.Mesh(
+    new THREE.TorusGeometry(1.22, 0.045, 12, 36),
+    brassMat
+  );
+  crownRimTorus.rotation.x = Math.PI * 0.5;
+  dragonCrownGroup.add(crownRimTorus);
+
+  const dragonPearlMat = new THREE.MeshStandardMaterial({
+    color: 0xfef08a,
+    emissive: 0xf59e0b,
+    emissiveIntensity: 0.65,
+    roughness: 0.18,
+    metalness: 0.20,
+  });
+  for (let p = 0; p < 8; p++) {
+    const ang = (p / 8) * Math.PI * 2;
+    const spire = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.18, 8), brassMat);
+    spire.position.set(Math.cos(ang) * 1.22, 0.09, Math.sin(ang) * 1.22);
+    dragonCrownGroup.add(spire);
+
+    const pearl = new THREE.Mesh(new THREE.SphereGeometry(0.042, 10, 10), dragonPearlMat);
+    pearl.position.set(Math.cos(ang) * 1.22, 0.20, Math.sin(ang) * 1.22);
+    dragonCrownGroup.add(pearl);
+  }
+
+  // Party Disco Star Ball above the table in Wave 3
+  const discoBallGroup = new THREE.Group();
+  discoBallGroup.position.set(0.0, 2.58, 0.15);
+  const discoCore = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.32, 1),
+    new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: 0xd97706,
+      emissiveIntensity: 0.52,
+      roughness: 0.18,
+      metalness: 0.22,
+    })
+  );
+  discoBallGroup.add(discoCore);
+  const discoRing1 = new THREE.Mesh(
+    new THREE.TorusGeometry(0.46, 0.022, 10, 28),
+    new THREE.MeshBasicMaterial({ color: 0x38bdf8, toneMapped: false })
+  );
+  discoRing1.rotation.x = Math.PI * 0.35;
+  discoBallGroup.add(discoRing1);
+  const discoRing2 = new THREE.Mesh(
+    new THREE.TorusGeometry(0.52, 0.02, 10, 28),
+    new THREE.MeshBasicMaterial({ color: 0xf472b6, toneMapped: false })
+  );
+  discoRing2.rotation.y = Math.PI * 0.35;
+  discoBallGroup.add(discoRing2);
+  wave3PropsGroup.add(discoBallGroup);
 
   // Snowball Pile for bonking Window Bandits
   const snowballPileGroup = new THREE.Group();
@@ -952,10 +1425,12 @@ export function createBunkerScene(canvas) {
   trashGroup.add(binMesh);
 
   // ============================================================================
-  // 7. 3 Hungry Critter Customer Seats (Seat 0 = CatNap riding DogDay "花花骑乐乐"!)
+  // 7. 3 Hungry Critter Customer Seats (Seat 0 = CatNap riding DogDay, Seats 1 & 2 evolve by Wave!)
   // ============================================================================
   const standeeTextures = {};
   const customerActors = [];
+  const seat1WaveModels = {};
+  const seat2WaveModels = {};
 
   for (let i = 0; i < 3; i++) {
     const sid = `customer_${i}`;
@@ -980,15 +1455,42 @@ export function createBunkerScene(canvas) {
       catnap.root.rotation.x = 0.18;
       charHolder.add(catnap.root);
     } else if (i === 1) {
+      // Seat 1 evolves across waves: W1 = Hoppy Hopscotch, W2 = Bubba Bubbaphant, W3 = Kickin Chicken
       const hoppy = buildHoppyHopscotchPlushModel(THREE);
       hoppy.root.scale.setScalar(0.68);
       hoppy.root.position.set(0, -0.45, 0);
       charHolder.add(hoppy.root);
+
+      const bubba = buildBubbaBubbaphantPlushModel(THREE);
+      bubba.root.scale.setScalar(0.68);
+      bubba.root.position.set(0, -0.45, 0);
+      bubba.root.visible = false;
+      charHolder.add(bubba.root);
+
+      const kickin = buildKickinChickenPlushModel(THREE);
+      kickin.root.scale.setScalar(0.68);
+      kickin.root.position.set(0, -0.45, 0);
+      kickin.root.visible = false;
+      charHolder.add(kickin.root);
+
+      seat1WaveModels.w1 = hoppy.root;
+      seat1WaveModels.w2 = bubba.root;
+      seat1WaveModels.w3 = kickin.root;
     } else {
+      // Seat 2 evolves across waves: W1 & W2 = CraftyCorn, W3 = Bobby BearHug
       const crafty = buildCraftyCornPlushModel(THREE);
       crafty.root.scale.setScalar(0.68);
       crafty.root.position.set(0, -0.45, 0);
       charHolder.add(crafty.root);
+
+      const bobby = buildBobbyBearHugPlushModel(THREE);
+      bobby.root.scale.setScalar(0.68);
+      bobby.root.position.set(0, -0.45, 0);
+      bobby.root.visible = false;
+      charHolder.add(bobby.root);
+
+      seat2WaveModels.w12 = crafty.root;
+      seat2WaveModels.w3 = bobby.root;
     }
 
     // Portrait medallion badge
@@ -1047,7 +1549,7 @@ export function createBunkerScene(canvas) {
   }
 
   // ============================================================================
-  // 8. Active Suction Spiral Particles, Flying Snowballs & Floating Drag Proxy
+  // 8. Active Suction Spiral Particles, Flying Snowballs, Cocoa Mugs & Floating Drag Proxy
   // ============================================================================
   const dragProxy = new THREE.Group();
   dragProxy.visible = false;
@@ -1055,6 +1557,7 @@ export function createBunkerScene(canvas) {
 
   const suctionFlights = [];
   const snowballFlights = [];
+  const cocoaFlights = [];
   const shockwaveRings = [];
 
   // Invisible raycast plane across the table & shelf
@@ -1067,13 +1570,18 @@ export function createBunkerScene(canvas) {
   const hitSpheres = [];
   for (const sid of STATION_IDS) {
     const p = STATION_COORDS[sid];
-    const radius = sid.startsWith('customer_') ? 0.92 : sid.startsWith('hotpot_') ? 0.65 : 0.54;
+    let radius = 0.58;
+    if (sid.startsWith('customer_')) radius = 0.92;
+    else if (sid.startsWith('hotpot_')) radius = 0.65;
+    else if (sid === 'sauce_bar' || sid === 'cocoa_station') radius = 0.60;
+    else if (sid === 'helper_buddy' || sid === 'golden_crate') radius = 0.62;
     const m = new THREE.Mesh(
       new THREE.SphereGeometry(radius, 10, 8),
       new THREE.MeshBasicMaterial({ visible: false })
     );
     m.position.copy(p);
     m.userData.stationId = sid;
+    m.userData.radius = radius;
     worldGroup.add(m);
     hitSpheres.push(m);
   }
@@ -1123,7 +1631,7 @@ export function createBunkerScene(canvas) {
   }
 
   function spawnSuctionFlight(foodType, fromPos, toSlotIdx, onComplete) {
-    const mesh = buildFoodItemMesh(foodType, false, false);
+    const mesh = buildFoodItemMesh(foodType, false, false, false);
     mesh.position.copy(fromPos);
     worldGroup.add(mesh);
     const toPos = STATION_COORDS[`tray_${toSlotIdx}`].clone().add(new THREE.Vector3(0, 0.12, 0));
@@ -1152,7 +1660,41 @@ export function createBunkerScene(canvas) {
     });
   }
 
-  function spawnFluteShockwave() {
+  function spawnCocoaFlight(toCustIdx = 0, onImpact = null) {
+    const mug = buildCocoaMugMesh();
+    mug.scale.setScalar(0.85);
+    mug.position.copy(STATION_COORDS.cocoa_station).add(new THREE.Vector3(0, 0.18, 0));
+    worldGroup.add(mug);
+    const targetCoord = STATION_COORDS[`customer_${toCustIdx}`] || STATION_COORDS.customer_0;
+    cocoaFlights.push({
+      mesh: mug,
+      fromPos: mug.position.clone(),
+      toPos: targetCoord.clone().add(new THREE.Vector3(0, 0.22, 0.35)),
+      elapsed: 0,
+      duration: 0.42,
+      onImpact,
+    });
+  }
+
+  function spawnSauceSplash(potIdx = 0) {
+    const targetPos = STATION_COORDS[`hotpot_${potIdx}`] || STATION_COORDS.sauce_bar;
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.22, 0.38, 28),
+      new THREE.MeshBasicMaterial({
+        color: 0xfbbf24,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.92,
+      })
+    );
+    ring.rotation.x = -Math.PI * 0.5;
+    ring.position.copy(targetPos);
+    ring.position.y += 0.16;
+    worldGroup.add(ring);
+    shockwaveRings.push({ mesh: ring, elapsed: 0, duration: 0.48 });
+  }
+
+  function spawnFluteShockwave(isRoyalWave3 = false) {
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.35, 0.52, 36),
       new THREE.MeshBasicMaterial({ color: 0xfde047, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
@@ -1162,12 +1704,27 @@ export function createBunkerScene(canvas) {
     ring.position.y = 0.12;
     worldGroup.add(ring);
     shockwaveRings.push({ mesh: ring, elapsed: 0, duration: 0.65 });
+
+    if (isRoyalWave3) {
+      const royalRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.24, 0.40, 36),
+        new THREE.MeshBasicMaterial({ color: 0xc084fc, side: THREE.DoubleSide, transparent: true, opacity: 0.92 })
+      );
+      royalRing.rotation.x = -Math.PI * 0.5;
+      royalRing.position.copy(STATION_COORDS.chinchilla_flute);
+      royalRing.position.y = 0.18;
+      worldGroup.add(royalRing);
+      shockwaveRings.push({ mesh: royalRing, elapsed: 0, duration: 0.78 });
+    }
   }
+
+  // Clamp initial scene materials
+  enforceNonIblMaterialHygiene(scene);
 
   let dragProxyKey = '';
 
   function syncAndRender(state, dt, elapsed) {
-    // 1. Substepped 1/120s physics for suction flights & snowball arcs
+    // 1. Substepped 1/120s physics for suction flights, snowball arcs & marshmallow cocoa mugs
     const substeps = Math.max(1, Math.min(8, Math.ceil(dt / (1 / 120))));
     const subDt = dt / substeps;
 
@@ -1206,6 +1763,21 @@ export function createBunkerScene(canvas) {
           if (s.mesh.geometry) s.mesh.geometry.dispose();
           snowballFlights.splice(i, 1);
           if (s.onImpact) s.onImpact();
+        }
+      }
+
+      for (let i = cocoaFlights.length - 1; i >= 0; i--) {
+        const c = cocoaFlights[i];
+        c.elapsed += subDt;
+        const u = Math.min(1, c.elapsed / c.duration);
+        c.mesh.position.lerpVectors(c.fromPos, c.toPos, u);
+        c.mesh.position.y += Math.sin(u * Math.PI) * 0.95;
+        c.mesh.rotation.y += subDt * 8.0;
+        if (u >= 1) {
+          worldGroup.remove(c.mesh);
+          disposeMeshTree(c.mesh);
+          cocoaFlights.splice(i, 1);
+          if (c.onImpact) c.onImpact();
         }
       }
     }
@@ -1273,7 +1845,7 @@ export function createBunkerScene(canvas) {
         disposeMeshTree(view.itemMount);
         view.itemMount.clear();
         if (slotState.foodType) {
-          view.itemMount.add(buildFoodItemMesh(slotState.foodType, false, false));
+          view.itemMount.add(buildFoodItemMesh(slotState.foodType, false, false, false));
         }
       }
       if (slotState.popTimer > 0) {
@@ -1284,19 +1856,25 @@ export function createBunkerScene(canvas) {
       }
     }
 
-    // 5. Sync 2 Hotpot Cooking Baskets
+    // 5. Sync 2 Hotpot Cooking Baskets (including Glazed Supreme Star Halo)
+    let anyPotReadyOrAlmost = false;
     for (let i = 0; i < 2; i++) {
       const pot = state.hotpots[i];
       const view = hotpotSlots[i];
-      const nextKey = pot.state === 'empty' ? '' : `${pot.foodType}:${pot.state}`;
+      if (pot.state === 'ready' || pot.cookProgress >= 0.65) {
+        anyPotReadyOrAlmost = true;
+      }
+      const nextKey = pot.state === 'empty'
+        ? ''
+        : `${pot.foodType}:${pot.state}:${pot.glazed ? 'glazed' : 'plain'}`;
       if (view.renderedKey !== nextKey) {
         view.renderedKey = nextKey;
         disposeMeshTree(view.itemMount);
         view.itemMount.clear();
         if (pot.foodType && pot.state !== 'empty') {
-          const cooked = pot.state === 'ready' || pot.state === 'burned';
+          const cooked = pot.state === 'ready' || pot.state === 'burned' || Boolean(pot.glazed);
           const burned = pot.state === 'burned';
-          view.itemMount.add(buildFoodItemMesh(pot.foodType, cooked, burned));
+          view.itemMount.add(buildFoodItemMesh(pot.foodType, cooked, burned, Boolean(pot.glazed)));
         }
       }
 
@@ -1309,7 +1887,7 @@ export function createBunkerScene(canvas) {
         let progress = 1.0;
         if (pot.state === 'cooking') {
           progress = Math.max(0.05, Math.min(1, pot.cookProgress));
-          view.gaugeFillMat.color.setHex(0x22c55e);
+          view.gaugeFillMat.color.setHex(pot.glazed ? 0xfbbf24 : 0x22c55e);
         } else if (pot.state === 'ready') {
           progress = Math.max(0.05, Math.min(1, 1 - pot.burnProgress));
           view.gaugeFillMat.color.setHex(pot.burnProgress > 0.6 ? 0xef4444 : 0xfacc15);
@@ -1324,7 +1902,86 @@ export function createBunkerScene(canvas) {
           view.gaugeFill.geometry = new THREE.RingGeometry(0.25, 0.32, 28, 1, Math.PI * 0.5, quantTheta);
         }
         view.itemMount.position.y = 0.02 + Math.sin(elapsed * 8.0 + i) * 0.03;
+        const foodMesh = view.itemMount.children[0];
+        if (foodMesh?.userData?.glazeHaloGroup) {
+          foodMesh.userData.glazeHaloGroup.rotation.y = elapsed * 3.4;
+        }
       }
+    }
+
+    // 5B. Sync Pillar 1 Stations (Sauce Bar & Cocoa Warmer)
+    const sbData = sauceBarGroup.userData;
+    if (sbData) {
+      sbData.particlesGroup.rotation.y = elapsed * 2.2;
+      sbData.ladlePivot.rotation.z = Math.sin(elapsed * 4.5) * 0.14;
+      sbData.readyAuraRing.material.opacity = anyPotReadyOrAlmost
+        ? 0.55 + Math.sin(elapsed * 8.0) * 0.30
+        : 0.18 + Math.sin(elapsed * 3.0) * 0.08;
+      sbData.doubleDipCrown.visible = state.wave >= 2;
+      if (sbData.doubleDipCrown.visible) {
+        sbData.doubleDipCrown.rotation.y = elapsed * 3.0;
+        sbData.doubleDipCrown.position.y = 0.42 + Math.sin(elapsed * 5.0) * 0.03;
+      }
+    }
+
+    const ccData = cocoaStationGroup.userData;
+    if (ccData) {
+      ccData.mugMesh.position.y = 0.07 + Math.abs(Math.sin(elapsed * 3.6)) * 0.025;
+      ccData.mugMesh.rotation.y = Math.sin(elapsed * 1.8) * 0.15;
+      ccData.warmGlowRing.material.opacity = 0.52 + Math.sin(elapsed * 5.0) * 0.22;
+      ccData.steamGroup.children.forEach((puff, idx) => {
+        const cycle = (elapsed * 0.9 + idx * 0.33) % 1;
+        puff.position.y = 0.42 + cycle * 0.28;
+        puff.scale.setScalar(0.75 + Math.sin(cycle * Math.PI) * 0.45);
+      });
+    }
+
+    // 5C. Sync Pillar 2 Helper Buddy & Golden Mystery Crate
+    const syncHelperFn = helperEventsScene?.syncHelperAndEvents || helperEventsScene?.sync;
+    if (typeof syncHelperFn === 'function') {
+      syncHelperFn(state, dt, elapsed);
+    }
+
+    // 5D. Sync Pillar 3 Wave 1 / 2 / 3 Environment & Character Evolutions
+    const waveNum = state.wave || 1;
+    wave2PropsGroup.visible = waveNum >= 2;
+    wave3PropsGroup.visible = waveNum >= 3;
+    dragonCrownGroup.visible = waveNum >= 3;
+
+    if (wave2PropsGroup.visible) {
+      for (const ar of auroraRibbons) {
+        const posAttr = ar.geo.attributes.position;
+        for (let vi = 0; vi < posAttr.count; vi++) {
+          const vx = posAttr.getX(vi);
+          const vy = posAttr.getY(vi);
+          const zOff = Math.sin(vx * 2.4 + elapsed * 3.2 + ar.phaseOffset) * 0.045;
+          posAttr.setZ(vi, zOff + vy * 0.02);
+        }
+        posAttr.needsUpdate = true;
+      }
+      for (const il of iceLanternMeshes) {
+        il.crystal.rotation.y = elapsed * 1.6;
+        il.innerStar.rotation.y = -elapsed * 3.2;
+      }
+    }
+
+    if (wave3PropsGroup.visible) {
+      discoBallGroup.rotation.y = elapsed * 2.4;
+      dragonCrownGroup.rotation.y = elapsed * 0.8;
+      fairyBulbs.forEach((bulb, bIdx) => {
+        const s = 0.88 + Math.sin(elapsed * 6.5 + bIdx * 0.9) * 0.22;
+        bulb.scale.setScalar(s);
+      });
+    }
+
+    if (seat1WaveModels.w1) {
+      seat1WaveModels.w1.visible = waveNum === 1;
+      seat1WaveModels.w2.visible = waveNum === 2;
+      seat1WaveModels.w3.visible = waveNum >= 3;
+    }
+    if (seat2WaveModels.w12) {
+      seat2WaveModels.w12.visible = waveNum <= 2;
+      seat2WaveModels.w3.visible = waveNum >= 3;
     }
 
     // 6. Sync Flute Chinchilla & Window Bandit
@@ -1374,7 +2031,7 @@ export function createBunkerScene(canvas) {
         disposeMeshTree(actor.orderIconMount);
         actor.orderIconMount.clear();
         if (cust.wantedFood) {
-          const iconMesh = buildFoodItemMesh(cust.wantedFood, true, false);
+          const iconMesh = buildFoodItemMesh(cust.wantedFood, true, false, false);
           iconMesh.scale.setScalar(0.88);
           actor.orderIconMount.add(iconMesh);
         }
@@ -1396,12 +2053,19 @@ export function createBunkerScene(canvas) {
     // 8. Sync Floating Drag Proxy (Food item being dragged 1:1 by finger)
     if (state.dragFood && state.dragWorldPos) {
       dragProxy.visible = true;
-      const nextKey = `${state.dragFood.foodType}:${state.dragFood.cooked ? 'cooked' : 'raw'}`;
+      const nextKey = `${state.dragFood.foodType}:${state.dragFood.cooked ? 'cooked' : 'raw'}:${state.dragFood.glazed ? 'glazed' : 'plain'}`;
       if (dragProxyKey !== nextKey) {
         dragProxyKey = nextKey;
         disposeMeshTree(dragProxy);
         dragProxy.clear();
-        dragProxy.add(buildFoodItemMesh(state.dragFood.foodType, state.dragFood.cooked, state.dragFood.burned));
+        dragProxy.add(
+          buildFoodItemMesh(
+            state.dragFood.foodType,
+            state.dragFood.cooked,
+            state.dragFood.burned,
+            Boolean(state.dragFood.glazed)
+          )
+        );
       }
       dragProxy.position.copy(state.dragWorldPos);
       dragProxy.position.y = 0.62;
@@ -1415,22 +2079,35 @@ export function createBunkerScene(canvas) {
       dragProxy.visible = false;
     }
 
+    // Enforce Non-IBL Three.js r161 material hygiene (metalness <= 0.22 when scene.environment === null)
+    enforceNonIblMaterialHygiene(scene);
+
     renderer.render(scene, camera);
   }
 
   // Pre-warm WebGL shaders so first spawn/burst never hitches
   renderer.compile(scene, camera);
 
+  window.__bunkerDebug = {
+    scene,
+    camera,
+    renderer,
+    hitSpheres,
+  };
+
   return {
     scene,
     camera,
     renderer,
+    hitSpheres,
     syncAndRender,
     screenToWorldOnTable,
     pickStationAtClientPos,
     getStationScreenRect,
     spawnSuctionFlight,
     spawnSnowballFlight,
+    spawnCocoaFlight,
+    spawnSauceSplash,
     spawnFluteShockwave,
   };
 }

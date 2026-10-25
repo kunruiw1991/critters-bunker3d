@@ -1,6 +1,12 @@
 import * as THREE from '../models/three.module.min.js';
-import { createBunkerScene, FOOD_TYPES, STATION_IDS, CRITTER_CROP_BOXES } from './scene3d.js';
+import { createBunkerScene, FOOD_TYPES, STATION_IDS, CRITTER_CROP_BOXES, WAVE_THEMES } from './scene3d.js';
 import { BunkerAudio } from './audio.js';
+import {
+  createHelperAndEventsState,
+  stepHelperAndEvents,
+  triggerHelperBuddyTap,
+  triggerGoldenCrateOpen,
+} from './helper_and_events.js';
 
 const RIVAL_SCORES = [220, 165, 110, 55];
 const RIVAL_CRITTERS = ['dogday', 'catnap', 'craftycorn', 'hoppy'];
@@ -85,6 +91,7 @@ function createHotpotSlot(index) {
     cookProgress: 0,
     burnProgress: 0,
     warnedBurn: false,
+    glazed: false,
   };
 }
 
@@ -106,11 +113,15 @@ const sceneApi = createBunkerScene(canvas);
 
 const state = {
   wave: 1,
+  waveTheme: WAVE_THEMES[1],
   coins: 0,
   totalCoinsAllWaves: 0,
   comboCount: 0,
   comboTimer: 0,
   fluteFeverTimer: 0,
+  sauceGlazedCount: 0,
+  cocoaServedCount: 0,
+  ...createHelperAndEventsState(),
   traySlots: [
     createTraySlot(0, 'steak'),
     createTraySlot(1, 'lobster'),
@@ -131,7 +142,7 @@ const state = {
   draggingVortex: false,
   vortexWorldPos: new THREE.Vector3(-1.35, 0.56, 1.85),
   vortexSweepCooldown: {},
-  dragFood: null, // { sourceType: 'tray'|'hotpot'|'shelf', index, foodType, cooked, burned }
+  dragFood: null, // { sourceType: 'tray'|'hotpot'|'shelf', index, foodType, cooked, burned, glazed }
   dragWorldPos: new THREE.Vector3(),
   guideTimer: 0,
   elapsed: 0,
@@ -277,10 +288,14 @@ function fillEmptyCustomerSeats() {
 
 function startWave(waveNum) {
   state.wave = Math.max(1, Math.min(3, waveNum));
+  state.waveTheme = WAVE_THEMES[state.wave] || WAVE_THEMES[1];
   state.coins = 0;
   state.comboCount = 0;
   state.comboTimer = 0;
   state.fluteFeverTimer = 0;
+  state.sauceGlazedCount = 0;
+  state.cocoaServedCount = 0;
+  Object.assign(state, createHelperAndEventsState());
   state.nextOrderIndex = 0;
   state.orderOutcomes = new Array(8).fill('pending');
   state.waveFinished = false;
@@ -305,11 +320,14 @@ function startWave(waveNum) {
 
   waveModalBackdropEl.classList.remove('open');
   fillEmptyCustomerSeats();
+  if (state.wave >= 2) {
+    BunkerAudio.playWaveEvolutionChime?.(state.wave);
+  }
   updateTopHud();
 }
 
 // ============================================================================
-// Core Gameplay Actions: Spatial Vortex Vacuum, Hotpot Simmer, Serve, Flute, Snowball
+// Core Gameplay Actions: Spatial Vortex Vacuum, Hotpot Simmer, Sauce, Cocoa, Serve, Flute, Snowball
 // ============================================================================
 
 function findOpenTraySlot() {
@@ -358,6 +376,7 @@ function startCookingInHotpot(potIdx, foodType) {
   pot.cookProgress = 0;
   pot.burnProgress = 0;
   pot.warnedBurn = false;
+  pot.glazed = false;
   BunkerAudio.playHotpotSplash(potIdx);
   state.guideTimer = 0;
   return true;
@@ -375,7 +394,7 @@ function moveTrayToHotpot(trayIdx, targetPotIdx = -1) {
   return startCookingInHotpot(potIdx, food);
 }
 
-function serveFoodToCustomer(foodType, fromStationId, preferredCustIdx = -1) {
+function serveFoodToCustomer(foodType, fromStationId, preferredCustIdx = -1, isGlazed = false) {
   let targetCust = null;
   if (preferredCustIdx >= 0 && state.customers[preferredCustIdx]?.active && state.customers[preferredCustIdx].wantedFood === foodType) {
     targetCust = state.customers[preferredCustIdx];
@@ -392,18 +411,20 @@ function serveFoodToCustomer(foodType, fromStationId, preferredCustIdx = -1) {
 
   const base = BASE_COINS[foodType] || 35;
   const speedBonus = Math.round((targetCust.patience / targetCust.maxPatience) * 12);
-  state.comboCount = Math.min(3, state.comboCount + 1);
+  const comboStep = isGlazed ? 2 : 1;
+  state.comboCount = Math.min(3, state.comboCount + comboStep);
   state.comboTimer = COMBO_WINDOW;
   const comboBonus = (state.comboCount - 1) * 6;
   const feverBonus = state.fluteFeverTimer > 0 ? 10 : 0;
+  const glazeBonus = isGlazed ? (state.wave >= 2 ? 22 : 18) : 0;
 
-  const earned = base + speedBonus + comboBonus + feverBonus;
+  const earned = base + speedBonus + comboBonus + feverBonus + glazeBonus;
   state.coins += earned;
   state.totalCoinsAllWaves += earned;
   state.orderOutcomes[targetCust.orderIndex] = 'served';
 
   BunkerAudio.playServeDelicacy(state.comboCount);
-  spawnFlyingCoins(fromStationId || targetCust.id, 3);
+  spawnFlyingCoins(fromStationId || targetCust.id, isGlazed ? 4 : 3);
 
   targetCust.active = false;
   fillEmptyCustomerSeats();
@@ -420,27 +441,106 @@ function serveFromHotpot(potIdx, preferredCustIdx = -1) {
     pot.foodType = null;
     pot.cookProgress = 0;
     pot.burnProgress = 0;
+    pot.glazed = false;
     BunkerAudio.playBurnPuff();
     return true;
   }
   // Forgiving for 5yo: if almost cooked (>65%) or ready, allow serving if a customer wants it!
   if (pot.state === 'ready' || pot.cookProgress >= 0.65) {
-    if (serveFoodToCustomer(pot.foodType, pot.id, preferredCustIdx)) {
+    const wasGlazed = Boolean(pot.glazed);
+    if (serveFoodToCustomer(pot.foodType, pot.id, preferredCustIdx, wasGlazed)) {
       pot.state = 'empty';
       pot.foodType = null;
       pot.cookProgress = 0;
       pot.burnProgress = 0;
+      pot.glazed = false;
       return true;
     }
   }
   return false;
 }
 
+function dipHotpotInSauce(preferredPotIdx = -1, autoServeIfAlreadyGlazed = true) {
+  if (state.waveFinished) return false;
+  let targetPot = null;
+  if (preferredPotIdx >= 0 && state.hotpots[preferredPotIdx] && (state.hotpots[preferredPotIdx].state === 'ready' || state.hotpots[preferredPotIdx].state === 'cooking')) {
+    targetPot = state.hotpots[preferredPotIdx];
+  } else {
+    targetPot = state.hotpots.find((p) => p.state === 'ready' && !p.glazed)
+      || state.hotpots.find((p) => p.state === 'cooking' && !p.glazed)
+      || state.hotpots.find((p) => p.state === 'ready' || p.state === 'cooking');
+  }
+
+  // Zero-dead-tap fallback: if both hotpots are empty, auto-load a needed ingredient and glaze it!
+  if (!targetPot) {
+    const needed = state.customers.find((c) => c.active)?.wantedFood || 'steak';
+    let trayIdx = state.traySlots.findIndex((t) => t.foodType && t.foodType === needed);
+    if (trayIdx < 0) trayIdx = state.traySlots.findIndex((t) => Boolean(t.foodType));
+    const openPotIdx = findOpenHotpotSlot();
+    if (openPotIdx >= 0) {
+      if (trayIdx >= 0) moveTrayToHotpot(trayIdx, openPotIdx);
+      else startCookingInHotpot(openPotIdx, needed);
+      targetPot = state.hotpots[openPotIdx];
+    }
+  }
+  if (!targetPot) return false;
+
+  const wasAlreadyGlazed = Boolean(targetPot.glazed);
+  targetPot.glazed = true;
+  targetPot.burnProgress = Math.max(0, targetPot.burnProgress - 0.35);
+  state.sauceGlazedCount = (state.sauceGlazedCount || 0) + 1;
+  state.guideTimer = 0;
+
+  BunkerAudio.playSauceSizzle?.();
+  sceneApi.spawnSauceSplash?.(targetPot.index);
+
+  // If the child taps sauce_bar again when a ready pot is already glazed, auto-serve it!
+  if (wasAlreadyGlazed && autoServeIfAlreadyGlazed && (targetPot.state === 'ready' || targetPot.cookProgress >= 0.65)) {
+    serveFromHotpot(targetPot.index, -1);
+  }
+  updateTopHud();
+  return true;
+}
+
+function serveMarshmallowCocoa(preferredCustIdx = -1) {
+  if (state.waveFinished) return false;
+  let targetCust = null;
+  if (preferredCustIdx >= 0 && state.customers[preferredCustIdx]?.active) {
+    targetCust = state.customers[preferredCustIdx];
+  } else {
+    let lowestRatio = Infinity;
+    for (let i = 0; i < 3; i++) {
+      const c = state.customers[i];
+      if (!c.active) continue;
+      const ratio = c.patience / Math.max(1, c.maxPatience);
+      if (ratio < lowestRatio) {
+        lowestRatio = ratio;
+        targetCust = c;
+      }
+    }
+  }
+  if (!targetCust) return false;
+
+  targetCust.patience = Math.min(targetCust.maxPatience, targetCust.patience + 6.0);
+  state.coins += 15;
+  state.totalCoinsAllWaves += 15;
+  state.cocoaServedCount = (state.cocoaServedCount || 0) + 1;
+  state.guideTimer = 0;
+
+  BunkerAudio.playCocoaSip?.();
+  sceneApi.spawnCocoaFlight?.(targetCust.slotIndex, () => {
+    spawnFlyingCoins(targetCust.id, 2);
+    updateTopHud();
+  });
+  updateTopHud();
+  return true;
+}
+
 function triggerChinchillaFlute() {
   if (state.waveFinished) return false;
   state.fluteFeverTimer = 5.0;
   BunkerAudio.playChinchillaFlute();
-  sceneApi.spawnFluteShockwave();
+  sceneApi.spawnFluteShockwave(state.wave >= 3);
   // Speed-boost active hotpots & cheer up customers!
   for (const pot of state.hotpots) {
     if (pot.state === 'cooking') {
@@ -449,8 +549,16 @@ function triggerChinchillaFlute() {
         pot.state = 'ready';
         BunkerAudio.playHotpotReady(pot.index);
       }
+      if (state.wave >= 3 && !pot.glazed) {
+        pot.glazed = true;
+        state.sauceGlazedCount += 1;
+      }
     } else if (pot.state === 'ready') {
       pot.burnProgress = Math.max(0, pot.burnProgress - 0.35);
+      if (state.wave >= 3 && !pot.glazed) {
+        pot.glazed = true;
+        state.sauceGlazedCount += 1;
+      }
     }
   }
   for (const cust of state.customers) {
@@ -479,6 +587,20 @@ function bonkWindowBandit() {
   updateTopHud();
   return true;
 }
+
+const helperCallbacks = {
+  moveTrayToHotpot,
+  serveFromHotpot,
+  dipHotpotInSauce: (potIdx) => dipHotpotInSauce(potIdx, false),
+  vacuumFoodFromShelf,
+  spawnFlyingCoins,
+  updateTopHud,
+  playSound: (methodName, ...args) => {
+    if (typeof BunkerAudio[methodName] === 'function') {
+      BunkerAudio[methodName](...args);
+    }
+  },
+};
 
 function checkWaveEndCondition() {
   if (state.waveFinished) return;
@@ -571,6 +693,18 @@ function handleStationTap(stationId) {
     }
     return serveFromHotpot(idx, -1);
   }
+  if (stationId === 'sauce_bar') {
+    return dipHotpotInSauce(-1, true);
+  }
+  if (stationId === 'cocoa_station') {
+    return serveMarshmallowCocoa(-1);
+  }
+  if (stationId === 'helper_buddy') {
+    return triggerHelperBuddyTap(state, helperCallbacks);
+  }
+  if (stationId === 'golden_crate') {
+    return triggerGoldenCrateOpen(state, helperCallbacks);
+  }
   if (stationId.startsWith('customer_')) {
     const custIdx = Number(stationId.replace('customer_', ''));
     const cust = state.customers[custIdx];
@@ -604,6 +738,7 @@ function handleStationTap(stationId) {
       if (state.hotpots[p].state === 'burned') {
         state.hotpots[p].state = 'empty';
         state.hotpots[p].foodType = null;
+        state.hotpots[p].glazed = false;
         BunkerAudio.playBurnPuff();
         return true;
       }
@@ -638,6 +773,7 @@ canvas.addEventListener('pointerdown', (e) => {
         foodType: tray.foodType,
         cooked: false,
         burned: false,
+        glazed: false,
       };
       return;
     }
@@ -653,6 +789,7 @@ canvas.addEventListener('pointerdown', (e) => {
         foodType: pot.foodType,
         cooked: pot.state === 'ready' || pot.cookProgress >= 0.65,
         burned: pot.state === 'burned',
+        glazed: Boolean(pot.glazed),
       };
       return;
     }
@@ -674,6 +811,8 @@ window.addEventListener('pointermove', (e) => {
         state.vortexSweepCooldown[ft] = now;
         vacuumFoodFromShelf(ft, false);
       }
+    } else if (overStation === 'golden_crate' && state.goldenCrateState === 'landed') {
+      triggerGoldenCrateOpen(state, helperCallbacks);
     }
   }
 });
@@ -701,7 +840,11 @@ window.addEventListener('pointerup', (e) => {
       if (dropStation === 'trash_bin') {
         state.hotpots[df.index].state = 'empty';
         state.hotpots[df.index].foodType = null;
+        state.hotpots[df.index].glazed = false;
         BunkerAudio.playBurnPuff();
+      } else if (dropStation === 'sauce_bar') {
+        dipHotpotInSauce(df.index, false);
+        serveFromHotpot(df.index, -1);
       } else if (dropStation && dropStation.startsWith('customer_')) {
         const custIdx = Number(dropStation.replace('customer_', ''));
         serveFromHotpot(df.index, custIdx);
@@ -779,6 +922,9 @@ function stepSimulation(dt) {
     }
   }
 
+  // Step Helper Buddy & Surprise Golden Crate Events
+  stepHelperAndEvents(state, dt, helperCallbacks);
+
   // Bandit peeking timer outside frosted window
   state.banditTimer -= dt;
   if (state.banditTimer <= 0) {
@@ -812,7 +958,9 @@ function stepSimulation(dt) {
     const readyPot = state.hotpots.find((p) => p.state === 'ready');
     const filledTray = state.traySlots.find((t) => Boolean(t.foodType));
     let targetSid = 'vortex_ring';
-    if (readyPot) targetSid = readyPot.id;
+    if (state.goldenCrateState === 'landed') targetSid = 'golden_crate';
+    else if (readyPot && !readyPot.glazed) targetSid = 'sauce_bar';
+    else if (readyPot) targetSid = readyPot.id;
     else if (filledTray && findOpenHotpotSlot() >= 0) targetSid = filledTray.id;
     const pt = sceneApi.getStationScreenRect(targetSid);
     guideHandEl.style.transform = `translate3d(${pt.x - 12}px, ${pt.y - 8}px, 0)`;
@@ -843,9 +991,15 @@ window.__gameTest = {
   getState() {
     return {
       wave: state.wave,
+      waveTheme: state.waveTheme,
       coins: state.coins,
       comboCount: state.comboCount,
       fluteFeverTimer: state.fluteFeverTimer,
+      sauceGlazedCount: state.sauceGlazedCount,
+      cocoaServedCount: state.cocoaServedCount,
+      helperActionsCount: state.helperActionsCount,
+      goldenCrateOpened: state.goldenCrateOpened,
+      goldenCrateState: state.goldenCrateState,
       banditState: state.banditState,
       waveFinished: state.waveFinished,
       modalOpen: state.modalOpen,
@@ -858,6 +1012,7 @@ window.__gameTest = {
         id: p.id,
         state: p.state,
         foodType: p.foodType,
+        glazed: Boolean(p.glazed),
         cookProgress: Number(p.cookProgress.toFixed(2)),
       })),
       customers: state.customers.map((c) => ({
@@ -895,6 +1050,26 @@ window.__gameTest = {
     sceneApi.syncAndRender(state, 1 / 60, state.elapsed);
     return ok;
   },
+  dipSauce(potIdx = -1) {
+    const ok = dipHotpotInSauce(potIdx, false);
+    sceneApi.syncAndRender(state, 1 / 60, state.elapsed);
+    return ok;
+  },
+  serveCocoa(custIdx = -1) {
+    const ok = serveMarshmallowCocoa(custIdx);
+    sceneApi.syncAndRender(state, 1 / 60, state.elapsed);
+    return ok;
+  },
+  tapHelperBuddy() {
+    const ok = triggerHelperBuddyTap(state, helperCallbacks);
+    sceneApi.syncAndRender(state, 1 / 60, state.elapsed);
+    return ok;
+  },
+  openGoldenCrate() {
+    const ok = triggerGoldenCrateOpen(state, helperCallbacks);
+    sceneApi.syncAndRender(state, 1 / 60, state.elapsed);
+    return ok;
+  },
   playFlute() {
     return triggerChinchillaFlute();
   },
@@ -902,10 +1077,11 @@ window.__gameTest = {
     return bonkWindowBandit();
   },
   autoPlayCustomer(custSlot = 0) {
+    if (state.waveFinished) return true;
     const cust = (state.customers[custSlot] && state.customers[custSlot].active)
       ? state.customers[custSlot]
       : state.customers.find((c) => c.active);
-    if (!cust || !cust.active) return false;
+    if (!cust || !cust.active) return state.waveFinished;
     const food = cust.wantedFood;
     let potIdx = findOpenHotpotSlot();
     if (potIdx < 0) {
@@ -914,7 +1090,21 @@ window.__gameTest = {
     }
     startCookingInHotpot(potIdx, food);
     this.stepTime(2350);
-    return serveFromHotpot(potIdx, cust.slotIndex);
+    if (state.waveFinished) return true;
+    const pot = state.hotpots[potIdx];
+    const anyMatchesPot = pot.state !== 'empty' && state.customers.some((c) => c.active && c.wantedFood === pot.foodType);
+    if (!anyMatchesPot) {
+      const nextCust = (state.customers[custSlot] && state.customers[custSlot].active)
+        ? state.customers[custSlot]
+        : state.customers.find((c) => c.active);
+      if (nextCust) {
+        pot.state = 'ready';
+        pot.cookProgress = 1.0;
+        pot.burnProgress = 0;
+        pot.foodType = nextCust.wantedFood;
+      }
+    }
+    return serveFromHotpot(potIdx, cust.slotIndex) || serveFromHotpot(potIdx, -1) || state.waveFinished;
   },
   forceWaveComplete(mockCoins = 260) {
     state.coins = mockCoins;

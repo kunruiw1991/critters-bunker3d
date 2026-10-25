@@ -55,7 +55,7 @@ function loadCritterV11GLB(THREE, glbUrl, rigGroups, bumpTex) {
         const pbr = m.pbrMetallicRoughness || {};
         const bc = pbr.baseColorFactor || [0.8, 0.8, 0.8, 1.0];
         const rough = pbr.roughnessFactor !== undefined ? pbr.roughnessFactor : 0.84;
-        const metal = pbr.metallicFactor !== undefined ? pbr.metallicFactor : 0.0;
+        const metal = Math.min(0.22, pbr.metallicFactor !== undefined ? pbr.metallicFactor : 0.0);
         const col = new THREE.Color();
         if (col.setRGB) {
           col.setRGB(bc[0], bc[1], bc[2], THREE.LinearSRGBColorSpace || 'srgb-linear');
@@ -290,7 +290,7 @@ export function buildCraftyCornPlushModel(THREE) {
       name: 'CraftyCorn_Horn_Spiral_Ridge',
       color: 0x88b4c8,
       roughness: 0.32,
-      metalness: 0.25
+      metalness: 0.22
     }),
     mouthCavity: new THREE.MeshBasicMaterial({
       name: 'CraftyCorn_Recessed_Mouth_Void',
@@ -323,7 +323,7 @@ export function buildCraftyCornPlushModel(THREE) {
       name: 'CraftyCorn_Silver_Zipper_Hardware',
       color: 0xcbd5e1,
       roughness: 0.26,
-      metalness: 0.82
+      metalness: 0.22
     }),
     seamDark: new THREE.MeshStandardMaterial({
       name: 'CraftyCorn_Zipper_Track_Dark',

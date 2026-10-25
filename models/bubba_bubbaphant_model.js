@@ -55,7 +55,7 @@ function loadCritterV11GLB(THREE, glbUrl, rigGroups, bumpTex) {
         const pbr = m.pbrMetallicRoughness || {};
         const bc = pbr.baseColorFactor || [0.8, 0.8, 0.8, 1.0];
         const rough = pbr.roughnessFactor !== undefined ? pbr.roughnessFactor : 0.84;
-        const metal = pbr.metallicFactor !== undefined ? pbr.metallicFactor : 0.0;
+        const metal = Math.min(0.22, pbr.metallicFactor !== undefined ? pbr.metallicFactor : 0.0);
         const col = new THREE.Color();
         if (col.setRGB) {
           col.setRGB(bc[0], bc[1], bc[2], THREE.LinearSRGBColorSpace || 'srgb-linear');
@@ -287,13 +287,13 @@ export function buildBubbaBubbaphantPlushModel(THREE) {
       emissive: 0xd97706,
       emissiveIntensity: 0.18,
       roughness: 0.32,
-      metalness: 0.65
+      metalness: 0.22
     }),
     screwBaseBlue: new THREE.MeshStandardMaterial({
       name: 'Bubba_ScrewBase_Cobalt_Blue',
       color: 0x1d4ed8,
       roughness: 0.28,
-      metalness: 0.78
+      metalness: 0.22
     }),
     tonguePink: new THREE.MeshStandardMaterial({
       name: 'Bubba_Tongue_Rose_Pink',
@@ -324,7 +324,7 @@ export function buildBubbaBubbaphantPlushModel(THREE) {
       name: 'Bubba_Silver_Zipper_Hardware',
       color: 0xd8dde6,
       roughness: 0.24,
-      metalness: 0.85
+      metalness: 0.22
     }),
     seamDark: new THREE.MeshStandardMaterial({
       name: 'Bubba_Zipper_Track_Black',
